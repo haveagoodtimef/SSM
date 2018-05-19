@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>    
+<beans xmlns="http://www.springframework.org/schema/beans"    
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"   
+    xmlns:p="http://www.springframework.org/schema/p"  
+    xmlns:aop="http://www.springframework.org/schema/aop"   
+    xmlns:context="http://www.springframework.org/schema/context"  
+    xmlns:jee="http://www.springframework.org/schema/jee"  
+    xmlns:tx="http://www.springframework.org/schema/tx"  
+    xsi:schemaLocation="    
+        http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.0.xsd  
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd  
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.0.xsd  
+        http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee-4.0.xsd  
+        http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.0.xsd">    
+ 	<!-- 自动扫描 -->
+    <context:component-scan base-package="com.yzt" />
+
+    <!-- 加载jdbc.properties文件(一般加载多个文件时  可考虑使用此方式) -->
+    <bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="locations">
+			<list>
+				<value>classpath:jdbc.properties</value>
+			</list>
+		</property>
+    </bean>
+   
+
+	<!-- session工厂 -->
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+	   <property name="dataSource" ref="dataSource"></property>
+	   <property name="configLocation" value="classpath:mybatis-config.xml"></property>
+	   <!-- 自动扫描mapping.xml文件 -->
+	   <property name="mapperLocations" >
+			<list><value>classpath:mappers/*.xml</value></list>
+		</property>
+	</bean>
+	
+	<!-- DAO接口所在包名，Spring会自动查找其下的类 -->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.yzt.dao" />
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"></property>
+    </bean>
+   
+   <!-- 配置DRUID连接池(这个连接池的说明:http://github.com 在搜索栏输入druid查找) -->
+   <bean id="stat-filter" class="com.alibaba.druid.filter.stat.StatFilter"   lazy-init="true">
+        <description>状态过滤器</description>
+         <!-- 通过slowSqlMillis用来配置SQL慢的标准 -->
+        <property name="slowSqlMillis" value="3000" />
+         <!-- 以日志形式输出执行效率慢的SQL -->
+        <property name="logSlowSql" value="true" />
+        <!-- 通过mergeSql属性，合并SQL -->
+        <property name="mergeSql" value="true" />
+   </bean>
+  
+   <!--配置DruidDataSource连接池 -->
+   <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource"
+		destroy-method="close" init-method="init" lazy-init="true">
+		<property name="driverClassName" value="${jdbc.driver}" />
+		<property name="url" value="${jdbc.url}" />
+		<property name="username" value="${jdbc.username}" />
+		<property name="password" value="${jdbc.password}" />
+		<!-- 初始化连接大小 -->
+		<property name="initialSize" value="${jdbc.initialSize}" />
+		<!-- 连接池最大数量 -->
+		<property name="maxActive" value="${jdbc.maxActive}" />
+		<!-- 连接池最小空闲 -->
+		<property name="minIdle" value="${jdbc.minIdle}" />
+		<!-- 获取连接最大等待时间 -->
+		<property name="maxWait" value="${jdbc.maxWait}" />
+		<!--配置了maxWait之后，缺省启用公平锁，并发效率会有所下降，如果需要可以通过配置useUnfairLock属性为true使用非公平锁。 -->
+		<property name="useUnfairLock" value="true" />
+		<property name="defaultReadOnly" value="false" />
+		
+		<!-- 通过配置StatFilter,打开监控台统计功能 -->
+		<property name="proxyFilters">
+			<list>
+				<ref bean="stat-filter" />
+			</list>
+		</property>
+		<property name="filters" value="${jdbc.druid.filters}" />
+		<!--<property name="connectionProperties" value="password=${username}"/>-->
+		<property name="testWhileIdle" value="true" />
+		<property name="testOnBorrow" value="false" />
+		<property name="testOnReturn" value="false" />
+		<property name="validationQuery" value="SELECT 1 from DUAL" />
+		<property name="timeBetweenLogStatsMillis" value="${jdbc.timeBetweenLogStatsMillis}" />
+	</bean>
+
+
+
+    <!-- (事务管理)transaction manager, use JtaTransactionManager for global tx -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource" />
+    </bean>
+
+    <!-- 自定义Realm -->
+    <bean id="myRealm" class="com.yzt.shiro.MyRealm"/>  
+
+    <!-- 安全管理器 -->
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">  
+      <property name="realm" ref="myRealm"/>  
+    </bean>  
+
+    <!-- Shiro过滤器 -->
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">  
+        <!-- Shiro的核心安全接口,这个属性是必须的 -->  
+        <property name="securityManager" ref="securityManager"/>
+        <!-- 身份认证失败，则跳转到登录页面的配置 -->  
+        <property name="loginUrl" value="/login.jsp"/>
+        <!-- 权限认证失败，则跳转到指定页面 -->  
+        <property name="unauthorizedUrl" value="/unauthorized.jsp"/>  
+        <!-- Shiro连接约束配置,即过滤链的定义 -->  
+        <property name="filterChainDefinitions">  
+            <value>  
+                /login=anon
+                /user/admin*=authc
+                /user/student*/**=roles[teacher]
+                /user/teacher*/**=perms["user:create"]
+            </value>  
+        </property>
+    </bean>  
+
+    <!-- 保证实现了Shiro内部lifecycle函数的bean执行 -->  
+    <bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>  
+
+    <!-- 开启Shiro注解 -->
+    <bean class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator" depends-on="lifecycleBeanPostProcessor"/>  
+        <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">  
+      <property name="securityManager" ref="securityManager"/>  
+    </bean>  
+
+    <!-- 配置事务通知属性 -->  
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">  
+        <!-- 定义事务传播属性 -->  
+        <tx:attributes>  
+            <tx:method name="insert*" propagation="REQUIRED" />  
+            <tx:method name="update*" propagation="REQUIRED" />  
+            <tx:method name="edit*" propagation="REQUIRED" />  
+            <tx:method name="save*" propagation="REQUIRED" />  
+            <tx:method name="add*" propagation="REQUIRED" />  
+            <tx:method name="new*" propagation="REQUIRED" />  
+            <tx:method name="set*" propagation="REQUIRED" />  
+            <tx:method name="remove*" propagation="REQUIRED" />  
+            <tx:method name="delete*" propagation="REQUIRED" />  
+            <tx:method name="change*" propagation="REQUIRED" />  
+            <tx:method name="check*" propagation="REQUIRED" />  
+            <tx:method name="get*" propagation="REQUIRED" read-only="true" />  
+            <tx:method name="find*" propagation="REQUIRED" read-only="true" />  
+            <tx:method name="load*" propagation="REQUIRED" read-only="true" />  
+            <tx:method name="*" propagation="REQUIRED" read-only="true" />  
+        </tx:attributes>  
+    </tx:advice>  
+
+    <!-- 配置事务切面
+    <aop:config>  
+       <aop:pointcut id="serviceOperation"  expression="execution(*com.yzt.service.*.*(..))" />  
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="serviceOperation" />   
+    </aop:config>       -->     
+</beans>

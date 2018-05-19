@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+</head>
+<body>
+	  <form action="${pageContext.request.contextPath }/user/login.do" method="get">
+        username:<input type="text" name="username"/><br>
+        password:<input type="password" name="password"/><br>
+        <input type="submit" value="登陆">${error }
+    </form>
+</body>
+</html>
